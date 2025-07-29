@@ -34,20 +34,37 @@ serve(async (req) => {
       .update({ analysis_status: 'analyzing' })
       .eq('id', repositoryId);
 
-    // Fetch recent commits from GitHub
-    const commitsResponse = await fetch(
-      `https://api.github.com/repos/${githubRepo.full_name}/commits?per_page=10`,
-      {
-        headers: {
-          'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'CommitTranslator/1.0'
-        }
-      }
-    );
-
+    // Fetch ALL commits from GitHub (no limitations)
     let commits = [];
-    if (commitsResponse.ok) {
-      commits = await commitsResponse.json();
+    let page = 1;
+    const perPage = 100; // Maximum allowed by GitHub API
+    
+    while (true) {
+      const commitsResponse = await fetch(
+        `https://api.github.com/repos/${githubRepo.full_name}/commits?per_page=${perPage}&page=${page}`,
+        {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'CommitTranslator/1.0'
+          }
+        }
+      );
+
+      if (!commitsResponse.ok) {
+        console.log(`Failed to fetch commits page ${page}`);
+        break;
+      }
+
+      const pageCommits = await commitsResponse.json();
+      
+      if (pageCommits.length === 0) {
+        break; // No more commits
+      }
+      
+      commits.push(...pageCommits);
+      page++;
+      
+      console.log(`Fetched ${pageCommits.length} commits from page ${page - 1}, total: ${commits.length}`);
     }
 
     // Fetch repository README
