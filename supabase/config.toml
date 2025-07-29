@@ -56,3 +56,6 @@ enable_confirmations = false
 
 [functions.analyze-repository]
 verify_jwt = false
+
+[functions.github-sync]
+verify_jwt = false

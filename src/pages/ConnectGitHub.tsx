@@ -271,6 +271,7 @@ const ConnectGitHub = () => {
   const handleConnectWithToken = () => {
     if (accessToken.trim()) {
       // Store the token for future sync operations
+      console.log('Storing GitHub token for sync operations');
       localStorage.setItem('github_token', accessToken.trim());
       fetchRepositoriesWithToken(accessToken.trim());
     }

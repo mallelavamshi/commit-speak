@@ -165,28 +165,27 @@ const Dashboard = () => {
     };
   }, [user?.id, toast]);
 
-  // Auto-sync with GitHub every 5 minutes
+  // Auto-sync with GitHub every 2 minutes (reduced frequency)
   useEffect(() => {
     if (!user || repositories.length === 0) return;
 
     const syncWithGitHub = async () => {
-      console.log('Auto-syncing repositories with GitHub...');
+      console.log('Auto-syncing repositories with GitHub...', repositories.length, 'repositories');
       
-      for (const repo of repositories) {
+      const githubToken = localStorage.getItem('github_token');
+      if (!githubToken) {
+        console.log('No GitHub token found, skipping auto-sync');
+        return;
+      }
+
+      for (const repo of repositories.slice(0, 3)) { // Limit to first 3 repos to avoid rate limits
         if (syncStatus[repo.id] === 'syncing') continue; // Skip if already syncing
         
+        console.log('Syncing repository:', repo.full_name);
         setSyncStatus(prev => ({ ...prev, [repo.id]: 'syncing' }));
         
         try {
-          // Get GitHub token from localStorage (stored during connection)
-          const githubToken = localStorage.getItem('github_token');
-          if (!githubToken) {
-            console.log('No GitHub token found, skipping sync for', repo.full_name);
-            setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
-            continue;
-          }
-
-          const { error } = await supabase.functions.invoke('github-sync', {
+          const { data, error } = await supabase.functions.invoke('github-sync', {
             body: {
               repositoryId: repo.id,
               githubToken: githubToken
@@ -197,28 +196,38 @@ const Dashboard = () => {
             console.error('GitHub sync error for', repo.full_name, error);
             setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
           } else {
+            console.log('GitHub sync success for', repo.full_name, data);
             setSyncStatus(prev => ({ ...prev, [repo.id]: 'synced' }));
           }
         } catch (error) {
           console.error('Error syncing repository', repo.full_name, error);
           setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
         }
+        
+        // Add small delay between repos to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
       setLastSyncTime(new Date());
     };
 
-    // Initial sync after 10 seconds
-    const initialSyncTimeout = setTimeout(syncWithGitHub, 10000);
+    // Initial sync after 5 seconds
+    const initialSyncTimeout = setTimeout(() => {
+      console.log('Starting initial sync...');
+      syncWithGitHub();
+    }, 5000);
     
-    // Set up periodic sync every 5 minutes
-    const syncInterval = setInterval(syncWithGitHub, 5 * 60 * 1000);
+    // Set up periodic sync every 2 minutes
+    const syncInterval = setInterval(() => {
+      console.log('Starting periodic sync...');
+      syncWithGitHub();
+    }, 2 * 60 * 1000);
 
     return () => {
       clearTimeout(initialSyncTimeout);
       clearInterval(syncInterval);
     };
-  }, [user, repositories, syncStatus]);
+  }, [user?.id, repositories.length]); // Only depend on repository count, not full array
 
   const fetchRepositories = async () => {
     try {

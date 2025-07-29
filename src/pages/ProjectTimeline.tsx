@@ -4,7 +4,7 @@ import Header from "@/components/layout/Header";
 import SocialCommitCard from "@/components/commits/SocialCommitCard";
 import ProjectHealth from "@/components/dashboard/ProjectHealth";
 import SearchBar from "@/components/search/SearchBar";
-import { ArrowLeft, Github, Star, GitBranch, Calendar, Filter, Activity, MessageSquare } from "lucide-react";
+import { ArrowLeft, Github, Star, GitBranch, Calendar, Filter, Activity, MessageSquare, RefreshCw } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -63,6 +63,70 @@ const ProjectTimeline = () => {
     }
   }, [user, navigate, id]);
 
+  // Set up real-time listeners for this specific repository
+  useEffect(() => {
+    if (!user || !id) return;
+
+    console.log('Setting up real-time listeners for repository:', id);
+
+    // Listen for repository changes
+    const repositoriesChannel = supabase
+      .channel('repository-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'repositories',
+          filter: `id=eq.${id}`
+        },
+        (payload) => {
+          console.log('Repository change detected:', payload);
+          if (payload.eventType === 'UPDATE') {
+            setRepository(payload.new as Repository);
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen for analysis changes for this repository
+    const analysisChannel = supabase
+      .channel('analysis-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'repository_analysis',
+          filter: `repository_id=eq.${id}`
+        },
+        (payload) => {
+          console.log('Analysis change detected for repository:', payload);
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const analysisData = payload.new;
+            
+            if (analysisData.analysis_type === 'commits' && analysisData.content.recent_commits) {
+              const commitsData_new = analysisData.content.recent_commits || [];
+              setCommits(commitsData_new);
+              setFilteredCommits(commitsData_new);
+              
+              if (analysisData.content.project_health) {
+                setProjectHealth(analysisData.content.project_health);
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(repositoriesChannel);
+      supabase.removeChannel(analysisChannel);
+    };
+  }, [user, id]);
+
   const fetchRepositoryData = async () => {
     try {
       setLoading(true);
@@ -113,6 +177,36 @@ const ProjectTimeline = () => {
       navigate("/dashboard");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Add manual sync functionality to test real-time updates
+  const triggerManualSync = async () => {
+    if (!repository) return;
+    
+    console.log('Triggering manual sync for repository:', repository.full_name);
+    
+    try {
+      const githubToken = localStorage.getItem('github_token');
+      if (!githubToken) {
+        console.error('No GitHub token found');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('github-sync', {
+        body: {
+          repositoryId: repository.id,
+          githubToken: githubToken
+        }
+      });
+
+      if (error) {
+        console.error('Manual sync error:', error);
+      } else {
+        console.log('Manual sync completed:', data);
+      }
+    } catch (error) {
+      console.error('Error during manual sync:', error);
     }
   };
 
@@ -289,6 +383,15 @@ const ProjectTimeline = () => {
             </div>
             <div className="flex items-center gap-3">
               {getStatusBadge()}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={triggerManualSync}
+                title="Sync with GitHub"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Sync
+              </Button>
               <Button variant="outline" size="sm" asChild>
                 <a href={repository.html_url} target="_blank" rel="noopener noreferrer">
                   <Github className="h-4 w-4" />
