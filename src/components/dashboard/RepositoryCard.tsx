@@ -174,7 +174,7 @@ export const RepositoryCard = ({ repository, analysis }: RepositoryCardProps) =>
               </p>
             </div>
 
-            {analysis.key_insights.length > 0 && (
+            {analysis.key_insights && analysis.key_insights.length > 0 && (
               <div>
                 <div className="text-xs font-medium mb-1">Key Insights</div>
                 <ul className="text-xs text-muted-foreground space-y-1">
