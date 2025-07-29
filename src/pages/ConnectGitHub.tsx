@@ -10,6 +10,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface GitHubRepo {
   id: number;
@@ -20,6 +21,9 @@ interface GitHubRepo {
   description: string | null;
   html_url: string;
   updated_at: string;
+  stargazers_count?: number;
+  forks_count?: number;
+  open_issues_count?: number;
 }
 
 const ConnectGitHub = () => {
@@ -110,6 +114,78 @@ const ConnectGitHub = () => {
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to connect to repository",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveRepositoryToDatabase = async (repo: GitHubRepo) => {
+    if (!user) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from('repositories')
+        .upsert({
+          user_id: user.id,
+          github_id: repo.id,
+          name: repo.name,
+          full_name: repo.full_name,
+          description: repo.description,
+          html_url: repo.html_url,
+          private: repo.private,
+          language: repo.language,
+          stargazers_count: repo.stargazers_count || 0,
+          forks_count: repo.forks_count || 0,
+          open_issues_count: repo.open_issues_count || 0,
+          analysis_status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving repository:', error);
+        return null;
+      }
+
+      // Trigger AI analysis
+      const { error: analysisError } = await supabase.functions.invoke('analyze-repository', {
+        body: { repositoryId: data.id, githubRepo: repo }
+      });
+
+      if (analysisError) {
+        console.error('Error triggering analysis:', analysisError);
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in saveRepositoryToDatabase:', error);
+      return null;
+    }
+  };
+
+  const handleConnectRepository = async (repo: GitHubRepo) => {
+    setLoading(true);
+    try {
+      const savedRepo = await saveRepositoryToDatabase(repo);
+      if (savedRepo) {
+        toast({
+          title: "Repository Connected!",
+          description: `${repo.full_name} is now being analyzed. Check your dashboard for insights.`,
+        });
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save repository. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred.",
         variant: "destructive",
       });
     } finally {
@@ -349,10 +425,16 @@ const ConnectGitHub = () => {
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         </Button>
-                        <Button size="sm" asChild>
-                          <Link to="/dashboard">
-                            Start Monitoring
-                          </Link>
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleConnectRepository(repo)}
+                          disabled={loading}
+                        >
+                          {loading ? (
+                            <Clock className="h-3 w-3 animate-spin" />
+                          ) : (
+                            "Start Monitoring"
+                          )}
                         </Button>
                       </div>
                     </div>
