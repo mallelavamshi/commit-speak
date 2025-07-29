@@ -40,8 +40,15 @@ const ConnectGitHub = () => {
   useEffect(() => {
     if (!user) {
       navigate("/auth");
+      return;
     }
-  }, [user, navigate]);
+    
+    // CRITICAL SECURITY: Clear all sensitive state when user changes  
+    setRepositories([]);
+    setConnectionType(null);
+    setAccessToken("");
+    setRepoUrl("");
+  }, [user?.id, navigate]); // Track user.id specifically to detect user changes
 
   const fetchRepositoriesWithToken = async (token: string) => {
     try {

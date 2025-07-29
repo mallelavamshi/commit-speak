@@ -30,6 +30,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log('Auth state change:', event, 'User ID:', session?.user?.id);
+        
+        // CRITICAL SECURITY: Clear state on user change or logout
+        if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && session?.user?.id !== user?.id)) {
+          console.log('Clearing auth state due to user change/logout');
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);

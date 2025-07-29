@@ -46,8 +46,12 @@ const Dashboard = () => {
       return;
     }
     
+    // CRITICAL SECURITY: Clear all state when user changes
+    setRepositories([]);
+    setAnalysis({});
+    
     fetchRepositories();
-  }, [user, navigate]);
+  }, [user?.id, navigate]); // Use user.id specifically to detect user changes
 
   const fetchRepositories = async () => {
     try {
