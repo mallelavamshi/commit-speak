@@ -4,13 +4,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Header from "@/components/layout/Header";
 import { Github, GitBranch, CheckCircle, Clock, AlertCircle, ExternalLink } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ConnectGitHub = () => {
   const [repoUrl, setRepoUrl] = useState("");
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth");
+    }
+  }, [user, navigate]);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -20,6 +29,10 @@ const ConnectGitHub = () => {
       setConnecting(false);
     }, 2000);
   };
+
+  if (!user) {
+    return null;
+  }
 
   const mockRepos = [
     { name: "my-ecommerce-app", owner: "username", private: false, language: "TypeScript" },

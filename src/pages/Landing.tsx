@@ -3,9 +3,12 @@ import { Card } from "@/components/ui/card";
 import Header from "@/components/layout/Header";
 import { Github, GitBranch, Search, Zap, Shield, Users } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import heroImage from "@/assets/hero-bg.jpg";
 
 const Landing = () => {
+  const { user } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -31,12 +34,21 @@ const Landing = () => {
               understand what's happening in their projects.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="xl" variant="hero" asChild>
-                <Link to="/connect">
-                  <Github className="h-5 w-5" />
-                  Connect Your Repository
-                </Link>
-              </Button>
+              {user ? (
+                <Button size="xl" variant="hero" asChild>
+                  <Link to="/connect">
+                    <Github className="h-5 w-5" />
+                    Connect Your Repository
+                  </Link>
+                </Button>
+              ) : (
+                <Button size="xl" variant="hero" asChild>
+                  <Link to="/auth">
+                    <Github className="h-5 w-5" />
+                    Get Started Free
+                  </Link>
+                </Button>
+              )}
               <Button size="xl" variant="outline" asChild>
                 <Link to="/dashboard">
                   View Demo Dashboard
@@ -133,12 +145,21 @@ const Landing = () => {
             Connect your GitHub repository in seconds and start getting clear, 
             understandable updates about your project.
           </p>
-          <Button size="xl" variant="hero" asChild>
-            <Link to="/connect">
-              <GitBranch className="h-5 w-5" />
-              Get Started Free
-            </Link>
-          </Button>
+          {user ? (
+            <Button size="xl" variant="hero" asChild>
+              <Link to="/connect">
+                <GitBranch className="h-5 w-5" />
+                Get Started Free
+              </Link>
+            </Button>
+          ) : (
+            <Button size="xl" variant="hero" asChild>
+              <Link to="/auth">
+                <GitBranch className="h-5 w-5" />
+                Get Started Free
+              </Link>
+            </Button>
+          )}
         </div>
       </section>
     </div>

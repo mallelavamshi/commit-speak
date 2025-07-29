@@ -3,7 +3,9 @@ import Header from "@/components/layout/Header";
 import ProjectCard from "@/components/dashboard/ProjectCard";
 import SearchBar from "@/components/search/SearchBar";
 import { Plus, TrendingUp, GitBranch, Activity } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useEffect } from "react";
 
 // Mock data
 const projects = [
@@ -46,10 +48,23 @@ const stats = [
 ];
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth");
+    }
+  }, [user, navigate]);
+
   const handleSearch = (query: string) => {
     console.log("Searching for:", query);
     // Implementation would filter/search projects
   };
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">
