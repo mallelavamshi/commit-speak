@@ -71,42 +71,39 @@ serve(async (req) => {
       console.log('No README found or error fetching README');
     }
 
-    // Analyze with Anthropic
+    // Analyze with Anthropic - Focus on plain English for non-technical users
     const analysisPrompt = `
-Analyze this GitHub repository and provide insights about its development lifecycle and current state.
+You are helping a CommitTranslator app convert technical GitHub commits into plain English for no-code developers, business owners, and non-technical team members.
 
 Repository: ${githubRepo.full_name}
 Description: ${githubRepo.description || 'No description provided'}
 Language: ${githubRepo.language || 'Not specified'}
-Stars: ${githubRepo.stargazers_count || 0}
-Forks: ${githubRepo.forks_count || 0}
-Open Issues: ${githubRepo.open_issues_count || 0}
 
-README Content:
-${readmeContent.substring(0, 2000)}
+Recent Commits to Translate:
+${commits.map((commit: any) => `- "${commit.commit.message}" by ${commit.commit.author.name}`).join('\n')}
 
-Recent Commits (${commits.length}):
-${commits.map((commit: any) => `- ${commit.commit.message} (by ${commit.commit.author.name})`).join('\n')}
+For each commit, provide:
+1. A simple, non-technical explanation that a business owner would understand
+2. Categorize each change as: "feature" (new functionality), "improvement" (enhancement), or "fix" (bug fix)
+3. Use friendly, conversational language
 
-Please provide a comprehensive analysis including:
-1. Project Overview & Purpose
-2. Development Activity Assessment
-3. Code Quality & Maintenance Status
-4. Team Collaboration Patterns
-5. Project Lifecycle Stage (early, active development, mature, maintenance, etc.)
-6. Key Technical Insights
-7. Recommendations for improvement
+Also provide an overall project health summary in simple terms.
 
-Format your response as a JSON object with these sections:
+Format your response as JSON:
 {
-  "overview": "Brief project summary",
-  "activity_level": "high/medium/low",
-  "lifecycle_stage": "early/active/mature/maintenance/inactive",
-  "quality_score": 1-10,
-  "collaboration_health": "excellent/good/fair/poor",
-  "key_insights": ["insight1", "insight2", ...],
-  "recommendations": ["rec1", "rec2", ...],
-  "commit_patterns": "Analysis of commit frequency and quality"
+  "commits": [
+    {
+      "original_message": "commit message here",
+      "plain_english": "Simple explanation here",
+      "type": "feature|improvement|fix",
+      "business_impact": "What this means for the product/users"
+    }
+  ],
+  "project_health": {
+    "status": "healthy|warning|needs_attention",
+    "summary": "Simple summary like 'App is running smoothly with 3 new features this week'",
+    "recent_activity": "Description of recent development activity"
+  }
 }
 `;
 
@@ -164,17 +161,20 @@ Format your response as a JSON object with these sections:
         content: analysisContent
       });
 
-    // Save commit analysis if we have commits
-    if (commits.length > 0) {
+    // Save commit analysis with AI translations if we have commits
+    if (commits.length > 0 && analysisContent.commits) {
       const commitAnalysis = {
         total_commits: commits.length,
-        recent_commits: commits.map((commit: any) => ({
-          sha: commit.sha,
-          message: commit.commit.message,
-          author: commit.commit.author.name,
-          date: commit.commit.author.date,
-          translated_message: translateCommitMessage(commit.commit.message)
-        }))
+        recent_commits: analysisContent.commits.map((aiCommit: any, index: number) => ({
+          sha: commits[index]?.sha || `unknown-${index}`,
+          message: aiCommit.original_message,
+          author: commits[index]?.commit?.author?.name || 'Unknown',
+          date: commits[index]?.commit?.author?.date || new Date().toISOString(),
+          plain_english: aiCommit.plain_english,
+          business_impact: aiCommit.business_impact,
+          type: aiCommit.type
+        })),
+        project_health: analysisContent.project_health
       };
 
       await supabase

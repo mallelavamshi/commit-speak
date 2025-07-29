@@ -1,9 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/layout/Header";
-import CommitCard from "@/components/commits/CommitCard";
+import SocialCommitCard from "@/components/commits/SocialCommitCard";
+import ProjectHealth from "@/components/dashboard/ProjectHealth";
 import SearchBar from "@/components/search/SearchBar";
-import { ArrowLeft, Github, Star, GitBranch, Calendar, Filter, Activity } from "lucide-react";
+import { ArrowLeft, Github, Star, GitBranch, Calendar, Filter, Activity, MessageSquare } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -29,7 +30,15 @@ interface CommitData {
   message: string;
   author: string;
   date: string;
-  translated_message: string;
+  plain_english: string;
+  business_impact: string;
+  type: 'feature' | 'improvement' | 'fix';
+}
+
+interface ProjectHealthData {
+  status: 'healthy' | 'warning' | 'needs_attention';
+  summary: string;
+  recent_activity: string;
 }
 
 const ProjectTimeline = () => {
@@ -38,7 +47,10 @@ const ProjectTimeline = () => {
   const navigate = useNavigate();
   const [repository, setRepository] = useState<Repository | null>(null);
   const [commits, setCommits] = useState<CommitData[]>([]);
+  const [filteredCommits, setFilteredCommits] = useState<CommitData[]>([]);
+  const [projectHealth, setProjectHealth] = useState<ProjectHealthData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -81,7 +93,14 @@ const ProjectTimeline = () => {
 
       if (!commitsError && commitsData) {
         const commitContent = commitsData.content as any;
-        setCommits(commitContent.recent_commits || []);
+        const commitsData_new = commitContent.recent_commits || [];
+        setCommits(commitsData_new);
+        setFilteredCommits(commitsData_new);
+        
+        // Extract project health if available
+        if (commitContent.project_health) {
+          setProjectHealth(commitContent.project_health);
+        }
       }
     } catch (error) {
       console.error('Error in fetchRepositoryData:', error);
@@ -91,10 +110,34 @@ const ProjectTimeline = () => {
     }
   };
 
+  // Implement natural language search
   const handleSearch = (query: string) => {
-    console.log("Searching commits for:", query);
-    // Implementation would filter commits
+    setSearchQuery(query);
+    
+    if (!query.trim()) {
+      setFilteredCommits(commits);
+      return;
+    }
+
+    const searchTerms = query.toLowerCase();
+    const filtered = commits.filter(commit => 
+      commit.plain_english.toLowerCase().includes(searchTerms) ||
+      commit.business_impact.toLowerCase().includes(searchTerms) ||
+      commit.message.toLowerCase().includes(searchTerms) ||
+      commit.type.toLowerCase().includes(searchTerms)
+    );
+    
+    setFilteredCommits(filtered);
   };
+
+  // Update filtered commits when commits change
+  useEffect(() => {
+    if (searchQuery) {
+      handleSearch(searchQuery);
+    } else {
+      setFilteredCommits(commits);
+    }
+  }, [commits, searchQuery]);
 
   if (!user) {
     return null;
@@ -209,60 +252,91 @@ const ProjectTimeline = () => {
           </div>
         </div>
 
-        {/* Search and Filters */}
-        {commits.length > 0 && (
-          <div className="flex flex-col md:flex-row gap-4 mb-8">
-            <div className="flex-1">
-              <SearchBar 
-                onSearch={handleSearch}
-                placeholder="Search commits... (e.g., 'show me authentication changes')"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4" />
-                All Types
-              </Button>
-            </div>
+        {/* Project Health Indicator */}
+        {projectHealth && (
+          <div className="mb-8">
+            <ProjectHealth health={projectHealth} />
           </div>
         )}
 
-        {/* Timeline */}
-        <div className="space-y-4">
+        {/* Search and Filters */}
+        {commits.length > 0 && (
+          <div className="mb-8">
+            <div className="flex flex-col md:flex-row gap-4 mb-6">
+              <div className="flex-1">
+                <SearchBar 
+                  onSearch={handleSearch}
+                  placeholder="Search changes... (e.g., 'when did we add login?' or 'show me bug fixes')"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4" />
+                  All Types
+                </Button>
+              </div>
+            </div>
+            
+            {searchQuery && (
+              <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
+                <MessageSquare className="h-4 w-4" />
+                <span>
+                  Showing {filteredCommits.length} result{filteredCommits.length !== 1 ? 's' : ''} 
+                  {searchQuery && ` for "${searchQuery}"`}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Social Media Style Timeline */}
+        <div className="space-y-6">
           <div className="flex items-center gap-2 mb-6">
-            <h2 className="text-xl font-semibold">Commit Timeline</h2>
-            <Badge variant="outline">{commits.length} recent commits</Badge>
+            <h2 className="text-2xl font-semibold">What's Been Happening</h2>
+            <Badge variant="outline" className="text-xs">
+              {filteredCommits.length} change{filteredCommits.length !== 1 ? 's' : ''}
+            </Badge>
           </div>
           
-          {commits.length > 0 ? (
-            commits.map((commit) => (
-              <div key={commit.sha} className="bg-card border rounded-lg p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <h3 className="font-medium mb-1">{commit.translated_message}</h3>
-                    <p className="text-sm text-muted-foreground mb-2">{commit.message}</p>
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span>by {commit.author}</span>
-                      <span>{new Date(commit.date).toLocaleDateString()}</span>
-                      <span className="font-mono text-xs">{commit.sha.substring(0, 7)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
+          {filteredCommits.length > 0 ? (
+            <div className="space-y-4">
+              {filteredCommits.map((commit) => (
+                <SocialCommitCard key={commit.sha} commit={commit} />
+              ))}
+            </div>
+          ) : searchQuery ? (
+            <div className="text-center py-16">
+              <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No Results Found</h3>
+              <p className="text-muted-foreground mb-6">
+                Try searching for something else like "login", "bug fixes", or "new features"
+              </p>
+              <Button variant="outline" onClick={() => handleSearch("")}>
+                Clear Search
+              </Button>
+            </div>
+          ) : commits.length > 0 ? (
+            <div className="text-center py-16">
+              <Activity className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-xl font-semibold mb-2">No Changes Match Your Filter</h3>
+              <p className="text-muted-foreground mb-6">
+                Try adjusting your search or filter settings.
+              </p>
+            </div>
           ) : (
             <div className="text-center py-16">
               <GitBranch className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Commit Data Available</h3>
+              <h3 className="text-xl font-semibold mb-2">No Changes Yet</h3>
               <p className="text-muted-foreground mb-6">
                 {repository.analysis_status === 'completed' 
-                  ? 'No recent commits found for this repository.'
-                  : 'Commit analysis is still pending. Please check back later.'
+                  ? 'No recent changes found for this project.'
+                  : 'We\'re still analyzing this project. Check back in a few minutes!'
                 }
               </p>
               {repository.analysis_status !== 'completed' && (
                 <Button variant="outline" onClick={fetchRepositoryData}>
-                  Refresh Analysis
+                  <Activity className="h-4 w-4" />
+                  Check Analysis Progress
                 </Button>
               )}
             </div>
