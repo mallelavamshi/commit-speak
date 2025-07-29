@@ -1,9 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Header from "@/components/layout/Header";
 import SocialCommitCard from "@/components/commits/SocialCommitCard";
 import ProjectHealth from "@/components/dashboard/ProjectHealth";
 import SearchBar from "@/components/search/SearchBar";
+import VisualTimeline from "@/components/timeline/VisualTimeline";
+import NoCodeInsightsDashboard from "@/components/insights/NoCodeInsightsDashboard";
 import { ArrowLeft, Github, Star, GitBranch, Calendar, Filter, Activity, MessageSquare, RefreshCw } from "lucide-react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -468,59 +471,232 @@ const ProjectTimeline = () => {
           </div>
         )}
 
-        {/* Social Media Style Timeline */}
-        <div className="space-y-6">
-          <div className="flex items-center gap-2 mb-6">
-            <h2 className="text-2xl font-semibold">What's Been Happening</h2>
-            <Badge variant="outline" className="text-xs">
-              {filteredCommits.length} change{filteredCommits.length !== 1 ? 's' : ''}
-            </Badge>
-          </div>
-          
-          {filteredCommits.length > 0 ? (
-            <div className="space-y-4">
-              {filteredCommits.map((commit) => (
-                <SocialCommitCard key={commit.sha} commit={commit} />
-              ))}
+        {/* Enhanced Tabs Interface */}
+        <Tabs defaultValue="timeline" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="timeline">Visual Timeline</TabsTrigger>
+            <TabsTrigger value="insights">AI Insights</TabsTrigger>
+            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+            <TabsTrigger value="search">AI Search</TabsTrigger>
+          </TabsList>
+
+          {/* Visual Timeline Tab */}
+          <TabsContent value="timeline" className="space-y-6">
+            {commits.length > 0 ? (
+              <VisualTimeline 
+                commits={commits.map(commit => ({
+                  sha: commit.sha,
+                  message: commit.message,
+                  author: {
+                    name: commit.author,
+                    email: `${commit.author}@example.com`,
+                    date: commit.date
+                  },
+                  ai_summary: commit.plain_english
+                }))}
+                repositoryName={repository.name}
+                stars={repository.stargazers_count}
+                language={repository.language || 'Unknown'}
+              />
+            ) : (
+              <div className="text-center py-16">
+                <GitBranch className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Timeline Not Available</h3>
+                <p className="text-muted-foreground mb-6">
+                  {repository.analysis_status === 'completed' 
+                    ? 'No data available to generate timeline.'
+                    : 'We\'re still analyzing this project to generate your timeline!'
+                  }
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* AI Insights Tab */}
+          <TabsContent value="insights" className="space-y-6">
+            {commits.length > 0 ? (
+              <NoCodeInsightsDashboard 
+                commits={commits.map(commit => ({
+                  sha: commit.sha,
+                  message: commit.message,
+                  author: {
+                    name: commit.author,
+                    email: `${commit.author}@example.com`,
+                    date: commit.date
+                  },
+                  ai_summary: commit.plain_english
+                }))}
+                repositoryName={repository.name}
+                language={repository.language || 'Unknown'}
+                stars={repository.stargazers_count}
+                forks={repository.forks_count}
+                openIssues={repository.open_issues_count}
+              />
+            ) : (
+              <div className="text-center py-16">
+                <Activity className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">Insights Coming Soon</h3>
+                <p className="text-muted-foreground mb-6">
+                  {repository.analysis_status === 'completed' 
+                    ? 'No data available for insights.'
+                    : 'We\'re analyzing your project to generate insights!'
+                  }
+                </p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Recent Activity Tab */}
+          <TabsContent value="activity" className="space-y-6">
+            <div className="flex items-center gap-2 mb-6">
+              <h2 className="text-2xl font-semibold">What's Been Happening</h2>
+              <Badge variant="outline" className="text-xs">
+                {filteredCommits.length} change{filteredCommits.length !== 1 ? 's' : ''}
+              </Badge>
             </div>
-          ) : searchQuery ? (
-            <div className="text-center py-16">
-              <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Results Found</h3>
-              <p className="text-muted-foreground mb-6">
-                Try searching for something else like "login", "bug fixes", or "new features"
-              </p>
-              <Button variant="outline" onClick={() => handleSearch("")}>
-                Clear Search
-              </Button>
-            </div>
-          ) : commits.length > 0 ? (
-            <div className="text-center py-16">
-              <Activity className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Changes Match Your Filter</h3>
-              <p className="text-muted-foreground mb-6">
-                Try adjusting your search or filter settings.
-              </p>
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <GitBranch className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-xl font-semibold mb-2">No Changes Yet</h3>
-              <p className="text-muted-foreground mb-6">
-                {repository.analysis_status === 'completed' 
-                  ? 'No recent changes found for this project.'
-                  : 'We\'re still analyzing this project. Check back in a few minutes!'
-                }
-              </p>
-              {repository.analysis_status !== 'completed' && (
-                <Button variant="outline" onClick={fetchRepositoryData}>
-                  <Activity className="h-4 w-4" />
-                  Check Analysis Progress
+            
+            {filteredCommits.length > 0 ? (
+              <div className="space-y-4">
+                {filteredCommits.map((commit) => (
+                  <SocialCommitCard key={commit.sha} commit={commit} />
+                ))}
+              </div>
+            ) : searchQuery ? (
+              <div className="text-center py-16">
+                <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Results Found</h3>
+                <p className="text-muted-foreground mb-6">
+                  Try searching for something else like "login", "bug fixes", or "new features"
+                </p>
+                <Button variant="outline" onClick={() => handleSearch("")}>
+                  Clear Search
                 </Button>
+              </div>
+            ) : commits.length > 0 ? (
+              <div className="text-center py-16">
+                <Activity className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Changes Match Your Filter</h3>
+                <p className="text-muted-foreground mb-6">
+                  Try adjusting your search or filter settings.
+                </p>
+              </div>
+            ) : (
+              <div className="text-center py-16">
+                <GitBranch className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No Changes Yet</h3>
+                <p className="text-muted-foreground mb-6">
+                  {repository.analysis_status === 'completed' 
+                    ? 'No recent changes found for this project.'
+                    : 'We\'re still analyzing this project. Check back in a few minutes!'
+                  }
+                </p>
+                {repository.analysis_status !== 'completed' && (
+                  <Button variant="outline" onClick={fetchRepositoryData}>
+                    <Activity className="h-4 w-4" />
+                    Check Analysis Progress
+                  </Button>
+                )}
+              </div>
+            )}
+          </TabsContent>
+
+          {/* AI Search Tab */}
+          <TabsContent value="search" className="space-y-6">
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1">
+                  <SearchBar 
+                    onSearch={handleSearch}
+                    placeholder="Ask me anything about this repository... (e.g., 'What is this app about?' or 'What should I work on next?')"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm">
+                    <Filter className="h-4 w-4" />
+                    All Types
+                  </Button>
+                </div>
+              </div>
+              
+              {searchQuery && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MessageSquare className="h-4 w-4" />
+                  <span>
+                    Showing {filteredCommits.length} result{filteredCommits.length !== 1 ? 's' : ''} 
+                    {searchQuery && ` for "${searchQuery}"`}
+                  </span>
+                </div>
+              )}
+
+              {/* AI Response */}
+              {aiResponse && (
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <MessageSquare className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg mb-2">AI Analysis</h3>
+                      <div className="text-muted-foreground prose prose-sm max-w-none">
+                        {aiResponse.answer.split('\n').map((paragraph, index) => (
+                          <p key={index} className="mb-3 last:mb-0">{paragraph}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Loading indicator for AI */}
+              {isAiLoading && (
+                <div className="bg-card border rounded-lg p-6">
+                  <div className="flex items-center gap-3">
+                    <Activity className="h-5 w-5 text-primary animate-spin" />
+                    <span className="text-muted-foreground">AI is analyzing your query...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Search Results */}
+              {filteredCommits.length > 0 && searchQuery ? (
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Relevant Commits</h3>
+                  {filteredCommits.map((commit) => (
+                    <SocialCommitCard key={commit.sha} commit={commit} />
+                  ))}
+                </div>
+              ) : searchQuery && !isAiLoading ? (
+                <div className="text-center py-16">
+                  <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No Results Found</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Try searching for something else like "login", "bug fixes", or "new features"
+                  </p>
+                  <Button variant="outline" onClick={() => handleSearch("")}>
+                    Clear Search
+                  </Button>
+                </div>
+              ) : !searchQuery && (
+                <div className="text-center py-16">
+                  <MessageSquare className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">AI-Powered Repository Search</h3>
+                  <p className="text-muted-foreground mb-6">
+                    Ask me anything about this repository and I'll analyze it for you!
+                  </p>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>Try questions like:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>"What is this application about?"</li>
+                      <li>"What features were added recently?"</li>
+                      <li>"What should I work on next?"</li>
+                      <li>"Show me bug fixes from last month"</li>
+                    </ul>
+                  </div>
+                </div>
               )}
             </div>
-          )}
-        </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
