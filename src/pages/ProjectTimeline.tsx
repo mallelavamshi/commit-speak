@@ -116,24 +116,64 @@ const ProjectTimeline = () => {
     }
   };
 
-  // Implement natural language search
-  const handleSearch = (query: string) => {
+  // Implement AI-powered search
+  const [aiResponse, setAiResponse] = useState<{
+    answer: string;
+    relevantCommits: CommitData[];
+    repositoryName: string;
+  } | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const handleSearch = async (query: string) => {
     setSearchQuery(query);
     
     if (!query.trim()) {
       setFilteredCommits(commits);
+      setAiResponse(null);
       return;
     }
 
-    const searchTerms = query.toLowerCase();
-    const filtered = commits.filter(commit => 
-      commit.plain_english.toLowerCase().includes(searchTerms) ||
-      commit.business_impact.toLowerCase().includes(searchTerms) ||
-      commit.message.toLowerCase().includes(searchTerms) ||
-      commit.type.toLowerCase().includes(searchTerms)
-    );
+    setIsAiLoading(true);
     
-    setFilteredCommits(filtered);
+    try {
+      // Call the AI chat function
+      const response = await supabase.functions.invoke('repository-ai-chat', {
+        body: { 
+          query: query.trim(),
+          repositoryId: id 
+        }
+      });
+
+      if (response.error) {
+        console.error('AI search error:', response.error);
+        // Fallback to basic search
+        const searchTerms = query.toLowerCase();
+        const filtered = commits.filter(commit => 
+          commit.plain_english.toLowerCase().includes(searchTerms) ||
+          commit.business_impact.toLowerCase().includes(searchTerms) ||
+          commit.message.toLowerCase().includes(searchTerms) ||
+          commit.type.toLowerCase().includes(searchTerms)
+        );
+        setFilteredCommits(filtered);
+      } else {
+        // Use AI response
+        setAiResponse(response.data);
+        setFilteredCommits(response.data.relevantCommits || []);
+      }
+    } catch (error) {
+      console.error('Error calling AI search:', error);
+      // Fallback to basic search
+      const searchTerms = query.toLowerCase();
+      const filtered = commits.filter(commit => 
+        commit.plain_english.toLowerCase().includes(searchTerms) ||
+        commit.business_impact.toLowerCase().includes(searchTerms) ||
+        commit.message.toLowerCase().includes(searchTerms) ||
+        commit.type.toLowerCase().includes(searchTerms)
+      );
+      setFilteredCommits(filtered);
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   // Update filtered commits when commits change
@@ -142,8 +182,9 @@ const ProjectTimeline = () => {
       handleSearch(searchQuery);
     } else {
       setFilteredCommits(commits);
+      setAiResponse(null);
     }
-  }, [commits, searchQuery]);
+  }, [commits]);
 
   if (!user) {
     return null;
@@ -272,7 +313,7 @@ const ProjectTimeline = () => {
               <div className="flex-1">
                 <SearchBar 
                   onSearch={handleSearch}
-                  placeholder="Search changes... (e.g., 'when did we add login?' or 'show me bug fixes')"
+                  placeholder="Ask me anything about this repository... (e.g., 'What is this app about?' or 'What should I work on next?')"
                 />
               </div>
               <div className="flex gap-2">
@@ -292,6 +333,35 @@ const ProjectTimeline = () => {
                 </span>
               </div>
             )}
+          </div>
+        )}
+
+        {/* AI Response Section */}
+        {aiResponse && (
+          <div className="mb-8 bg-card border rounded-lg p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <MessageSquare className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-lg mb-2">AI Analysis</h3>
+                <div className="text-muted-foreground prose prose-sm max-w-none">
+                  {aiResponse.answer.split('\n').map((paragraph, index) => (
+                    <p key={index} className="mb-3 last:mb-0">{paragraph}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Loading indicator for AI */}
+        {isAiLoading && (
+          <div className="mb-8 bg-card border rounded-lg p-6">
+            <div className="flex items-center gap-3">
+              <Activity className="h-5 w-5 text-primary animate-spin" />
+              <span className="text-muted-foreground">AI is analyzing your query...</span>
+            </div>
           </div>
         )}
 
