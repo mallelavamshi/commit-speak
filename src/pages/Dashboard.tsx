@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import Header from "@/components/layout/Header";
 import { RepositoryCard } from "@/components/dashboard/RepositoryCard";
-import SearchBar from "@/components/search/SearchBar";
-import { Plus, TrendingUp, GitBranch, Activity } from "lucide-react";
+import { RepositoryListItem } from "@/components/dashboard/RepositoryListItem";
+import { Input } from "@/components/ui/input";
+
+import { Plus, TrendingUp, GitBranch, Activity, Grid3X3, List, Search } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
@@ -54,6 +56,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [repositoryToDelete, setRepositoryToDelete] = useState<Repository | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredRepositories, setFilteredRepositories] = useState<Repository[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -112,6 +117,21 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
+
+  // Update filtered repositories when repositories or search query change
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRepositories(repositories);
+    } else {
+      const filtered = repositories.filter(repo =>
+        repo.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        repo.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        repo.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        repo.language?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredRepositories(filtered);
+    }
+  }, [repositories, searchQuery]);
 
   const handleDeleteRepository = async (repositoryId: string) => {
     setDeleteLoading(repositoryId);
@@ -222,15 +242,6 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Search Bar */}
-        {repositories.length > 0 && (
-          <div className="mb-8 flex justify-center">
-            <SearchBar 
-              onSearch={handleSearch}
-              placeholder="Search across all repositories... (e.g., 'show me authentication changes')"
-            />
-          </div>
-        )}
 
         {/* Stats Overview */}
         {repositories.length > 0 && (
@@ -262,17 +273,81 @@ const Dashboard = () => {
           </div>
         ) : repositories.length > 0 ? (
           <div className="mb-8">
-            <h2 className="text-2xl font-semibold mb-6">Your Repositories</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {repositories.map((repository) => (
-                <RepositoryCard 
-                  key={repository.id} 
-                  repository={repository}
-                  analysis={analysis[repository.id]}
-                  onDelete={initiateDelete}
-                />
-              ))}
+            {/* Header with Search and View Toggle */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="flex items-center gap-4">
+                <h2 className="text-2xl font-semibold">Your Repositories</h2>
+                
+                {/* Search Bar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search repositories..."
+                    className="pl-10 w-64"
+                  />
+                </div>
+              </div>
+
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                <Button
+                  variant={viewMode === 'list' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className="h-8 px-3"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={viewMode === 'card' ? 'default' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('card')}
+                  className="h-8 px-3"
+                >
+                  <Grid3X3 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+
+            {/* Repository List/Grid */}
+            {filteredRepositories.length > 0 ? (
+              viewMode === 'list' ? (
+                <div className="space-y-2">
+                  {filteredRepositories.map((repository) => (
+                    <RepositoryListItem 
+                      key={repository.id} 
+                      repository={repository}
+                      onDelete={initiateDelete}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredRepositories.map((repository) => (
+                    <RepositoryCard 
+                      key={repository.id} 
+                      repository={repository}
+                      analysis={analysis[repository.id]}
+                      onDelete={initiateDelete}
+                    />
+                  ))}
+                </div>
+              )
+            ) : searchQuery ? (
+              /* No Search Results */
+              <div className="text-center py-16">
+                <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-xl font-semibold mb-2">No repositories found</h3>
+                <p className="text-muted-foreground mb-6">
+                  No repositories match your search for "{searchQuery}". Try a different search term.
+                </p>
+                <Button variant="outline" onClick={() => setSearchQuery('')}>
+                  Clear Search
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : (
           /* Empty State for New Users */
