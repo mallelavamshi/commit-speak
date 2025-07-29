@@ -91,9 +91,13 @@ const ProjectTimeline = () => {
         .eq('analysis_type', 'commits')
         .single();
 
+      console.log('Commits data fetch result:', { commitsData, commitsError });
+
       if (!commitsError && commitsData) {
         const commitContent = commitsData.content as any;
+        console.log('Commit content structure:', commitContent);
         const commitsData_new = commitContent.recent_commits || [];
+        console.log('Extracted commits:', commitsData_new);
         setCommits(commitsData_new);
         setFilteredCommits(commitsData_new);
         
@@ -101,6 +105,8 @@ const ProjectTimeline = () => {
         if (commitContent.project_health) {
           setProjectHealth(commitContent.project_health);
         }
+      } else {
+        console.error('Failed to fetch commits:', commitsError);
       }
     } catch (error) {
       console.error('Error in fetchRepositoryData:', error);
