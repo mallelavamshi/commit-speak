@@ -15,7 +15,7 @@ import { RepositoryCard } from "@/components/dashboard/RepositoryCard";
 import { RepositoryListItem } from "@/components/dashboard/RepositoryListItem";
 import { Input } from "@/components/ui/input";
 
-import { Plus, TrendingUp, GitBranch, Activity, Grid3X3, List, Search } from "lucide-react";
+import { Plus, TrendingUp, GitBranch, Activity, Grid3X3, List, Search, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
@@ -59,6 +59,8 @@ const Dashboard = () => {
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRepositories, setFilteredRepositories] = useState<Repository[]>([]);
+  const [syncStatus, setSyncStatus] = useState<Record<string, 'syncing' | 'synced' | 'error'>>({});
+  const [lastSyncTime, setLastSyncTime] = useState<Date>(new Date());
 
   useEffect(() => {
     if (!user) {
@@ -72,6 +74,151 @@ const Dashboard = () => {
     
     fetchRepositories();
   }, [user?.id, navigate]); // Use user.id specifically to detect user changes
+
+  // Set up real-time listeners
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('Setting up real-time listeners for repositories and analysis');
+
+    // Listen for repository changes
+    const repositoriesChannel = supabase
+      .channel('repositories-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'repositories',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('Repository change detected:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            setRepositories(prev => [payload.new as Repository, ...prev]);
+            toast({
+              title: "New Repository Added",
+              description: `${payload.new.full_name} has been connected to your dashboard.`,
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            setRepositories(prev => 
+              prev.map(repo => 
+                repo.id === payload.new.id ? payload.new as Repository : repo
+              )
+            );
+            // Show notification for significant changes
+            if (payload.old.analysis_status !== payload.new.analysis_status) {
+              const statusMessages = {
+                analyzing: "Analysis started",
+                completed: "Analysis completed",
+                failed: "Analysis failed"
+              };
+              toast({
+                title: "Repository Status Updated",
+                description: `${payload.new.full_name}: ${statusMessages[payload.new.analysis_status] || 'Status changed'}`,
+              });
+            }
+          } else if (payload.eventType === 'DELETE') {
+            setRepositories(prev => prev.filter(repo => repo.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen for analysis changes
+    const analysisChannel = supabase
+      .channel('analysis-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'repository_analysis'
+        },
+        (payload) => {
+          console.log('Analysis change detected:', payload);
+          
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            if (payload.new.analysis_type === 'overview') {
+              setAnalysis(prev => ({
+                ...prev,
+                [payload.new.repository_id]: payload.new.content as RepositoryAnalysis
+              }));
+              
+              if (payload.eventType === 'INSERT') {
+                toast({
+                  title: "New Analysis Available",
+                  description: "Repository analysis has been completed with fresh insights.",
+                });
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions
+    return () => {
+      supabase.removeChannel(repositoriesChannel);
+      supabase.removeChannel(analysisChannel);
+    };
+  }, [user?.id, toast]);
+
+  // Auto-sync with GitHub every 5 minutes
+  useEffect(() => {
+    if (!user || repositories.length === 0) return;
+
+    const syncWithGitHub = async () => {
+      console.log('Auto-syncing repositories with GitHub...');
+      
+      for (const repo of repositories) {
+        if (syncStatus[repo.id] === 'syncing') continue; // Skip if already syncing
+        
+        setSyncStatus(prev => ({ ...prev, [repo.id]: 'syncing' }));
+        
+        try {
+          // Get GitHub token from localStorage (stored during connection)
+          const githubToken = localStorage.getItem('github_token');
+          if (!githubToken) {
+            console.log('No GitHub token found, skipping sync for', repo.full_name);
+            setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+            continue;
+          }
+
+          const { error } = await supabase.functions.invoke('github-sync', {
+            body: {
+              repositoryId: repo.id,
+              githubToken: githubToken
+            }
+          });
+
+          if (error) {
+            console.error('GitHub sync error for', repo.full_name, error);
+            setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+          } else {
+            setSyncStatus(prev => ({ ...prev, [repo.id]: 'synced' }));
+          }
+        } catch (error) {
+          console.error('Error syncing repository', repo.full_name, error);
+          setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+        }
+      }
+      
+      setLastSyncTime(new Date());
+    };
+
+    // Initial sync after 10 seconds
+    const initialSyncTimeout = setTimeout(syncWithGitHub, 10000);
+    
+    // Set up periodic sync every 5 minutes
+    const syncInterval = setInterval(syncWithGitHub, 5 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialSyncTimeout);
+      clearInterval(syncInterval);
+    };
+  }, [user, repositories, syncStatus]);
 
   const fetchRepositories = async () => {
     try {
@@ -193,9 +340,46 @@ const Dashboard = () => {
     }
   };
 
-  const handleSearch = (query: string) => {
-    console.log("Searching for:", query);
-    // Implementation would filter/search repositories
+  const manualSync = async () => {
+    if (repositories.length === 0) return;
+    
+    toast({
+      title: "Syncing Repositories",
+      description: "Checking for updates from GitHub...",
+    });
+
+    for (const repo of repositories) {
+      setSyncStatus(prev => ({ ...prev, [repo.id]: 'syncing' }));
+      
+      try {
+        const githubToken = localStorage.getItem('github_token');
+        if (!githubToken) {
+          setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+          continue;
+        }
+
+        const { error } = await supabase.functions.invoke('github-sync', {
+          body: {
+            repositoryId: repo.id,
+            githubToken: githubToken
+          }
+        });
+
+        if (error) {
+          setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+        } else {
+          setSyncStatus(prev => ({ ...prev, [repo.id]: 'synced' }));
+        }
+      } catch (error) {
+        setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+      }
+    }
+    
+    setLastSyncTime(new Date());
+    toast({
+      title: "Sync Complete",
+      description: "Repositories have been synced with GitHub.",
+    });
   };
 
   if (!user) {
@@ -273,7 +457,7 @@ const Dashboard = () => {
           </div>
         ) : repositories.length > 0 ? (
           <div className="mb-8">
-            {/* Header with Search and View Toggle */}
+            {/* Header with Search, Sync Status and View Toggle */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div className="flex items-center gap-4">
                 <h2 className="text-2xl font-semibold">Your Repositories</h2>
@@ -290,24 +474,45 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* View Toggle */}
-              <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="h-8 px-3"
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'card' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('card')}
-                  className="h-8 px-3"
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-4">
+                {/* Sync Status */}
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-1">
+                    <Wifi className="h-4 w-4 text-green-500" />
+                    <span>Live Sync</span>
+                  </div>
+                  <span>•</span>
+                  <span>Last sync: {lastSyncTime.toLocaleTimeString()}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={manualSync}
+                    className="h-8 px-2"
+                    disabled={Object.values(syncStatus).some(status => status === 'syncing')}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${Object.values(syncStatus).some(status => status === 'syncing') ? 'animate-spin' : ''}`} />
+                  </Button>
+                </div>
+
+                {/* View Toggle */}
+                <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+                  <Button
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="h-8 px-3"
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={viewMode === 'card' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('card')}
+                    className="h-8 px-3"
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
