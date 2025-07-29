@@ -46,6 +46,11 @@ const ConnectGitHub = () => {
   const fetchRepositoriesWithToken = async (token: string) => {
     try {
       setLoading(true);
+      // Clear any existing data before fetching new data
+      setRepositories([]);
+      setConnectionType(null);
+      
+      console.log('Fetching repositories with new token...');
       const response = await fetch('https://api.github.com/user/repos?visibility=all&sort=updated&per_page=100', {
         headers: {
           'Authorization': `token ${token}`,
