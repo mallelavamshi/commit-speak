@@ -11,7 +11,8 @@ import {
   Activity,
   CheckCircle,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -43,9 +44,10 @@ interface RepositoryAnalysis {
 interface RepositoryCardProps {
   repository: Repository;
   analysis?: RepositoryAnalysis;
+  onDelete?: (repositoryId: string) => void;
 }
 
-export const RepositoryCard = ({ repository, analysis }: RepositoryCardProps) => {
+export const RepositoryCard = ({ repository, analysis, onDelete }: RepositoryCardProps) => {
   const getStatusIcon = () => {
     switch (repository.analysis_status) {
       case 'completed':
@@ -202,6 +204,16 @@ export const RepositoryCard = ({ repository, analysis }: RepositoryCardProps) =>
               <ExternalLink className="h-3 w-3" />
             </a>
           </Button>
+          {onDelete && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => onDelete(repository.id)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          )}
         </div>
       </div>
     </Card>

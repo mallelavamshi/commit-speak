@@ -1,4 +1,15 @@
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import Header from "@/components/layout/Header";
 import { RepositoryCard } from "@/components/dashboard/RepositoryCard";
 import SearchBar from "@/components/search/SearchBar";
@@ -7,6 +18,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Repository {
   id: string;
@@ -36,9 +48,12 @@ interface RepositoryAnalysis {
 const Dashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [analysis, setAnalysis] = useState<Record<string, RepositoryAnalysis>>({});
   const [loading, setLoading] = useState(true);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
+  const [repositoryToDelete, setRepositoryToDelete] = useState<Repository | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -95,6 +110,66 @@ const Dashboard = () => {
       console.error('Error in fetchRepositories:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteRepository = async (repositoryId: string) => {
+    setDeleteLoading(repositoryId);
+    
+    try {
+      // Delete repository analysis first (due to foreign key constraint)
+      const { error: analysisError } = await supabase
+        .from('repository_analysis')
+        .delete()
+        .eq('repository_id', repositoryId);
+
+      if (analysisError) {
+        console.error('Error deleting repository analysis:', analysisError);
+        throw new Error('Failed to delete repository analysis');
+      }
+
+      // Delete the repository
+      const { error: repoError } = await supabase
+        .from('repositories')
+        .delete()
+        .eq('id', repositoryId)
+        .eq('user_id', user!.id); // Ensure user can only delete their own repos
+
+      if (repoError) {
+        console.error('Error deleting repository:', repoError);
+        throw new Error('Failed to delete repository');
+      }
+
+      // Update local state
+      setRepositories(prev => prev.filter(repo => repo.id !== repositoryId));
+      setAnalysis(prev => {
+        const updated = { ...prev };
+        delete updated[repositoryId];
+        return updated;
+      });
+
+      toast({
+        title: "Repository Removed",
+        description: `Successfully removed repository from your dashboard.`,
+      });
+
+    } catch (error) {
+      console.error('Error in handleDeleteRepository:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove repository. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteLoading(null);
+      setRepositoryToDelete(null);
+    }
+  };
+
+  const initiateDelete = (repositoryId: string) => {
+    const repository = repositories.find(repo => repo.id === repositoryId);
+    if (repository) {
+      setRepositoryToDelete(repository);
     }
   };
 
@@ -194,6 +269,7 @@ const Dashboard = () => {
                   key={repository.id} 
                   repository={repository}
                   analysis={analysis[repository.id]}
+                  onDelete={initiateDelete}
                 />
               ))}
             </div>
@@ -214,6 +290,29 @@ const Dashboard = () => {
             </Button>
           </div>
         )}
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!repositoryToDelete} onOpenChange={() => setRepositoryToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove Repository</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to remove <strong>{repositoryToDelete?.full_name}</strong> from your dashboard? 
+                This will permanently delete all analysis data and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => repositoryToDelete && handleDeleteRepository(repositoryToDelete.id)}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={!!deleteLoading}
+              >
+                {deleteLoading ? "Removing..." : "Remove Repository"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
