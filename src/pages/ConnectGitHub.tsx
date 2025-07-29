@@ -46,7 +46,7 @@ const ConnectGitHub = () => {
   const fetchRepositoriesWithToken = async (token: string) => {
     try {
       setLoading(true);
-      const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=10', {
+      const response = await fetch('https://api.github.com/user/repos?visibility=all&sort=updated&per_page=100', {
         headers: {
           'Authorization': `token ${token}`,
           'Accept': 'application/vnd.github.v3+json',
