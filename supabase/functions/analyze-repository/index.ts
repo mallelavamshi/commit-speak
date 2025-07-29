@@ -169,7 +169,7 @@ Format your response as JSON:
           sha: commits[index]?.sha || `unknown-${index}`,
           message: aiCommit.original_message,
           author: commits[index]?.commit?.author?.name || 'Unknown',
-          date: commits[index]?.commit?.author?.date || new Date().toISOString(),
+          date: commits[index]?.commit?.committer?.date || commits[index]?.commit?.author?.date || new Date().toISOString(),
           plain_english: aiCommit.plain_english,
           business_impact: aiCommit.business_impact,
           type: aiCommit.type
