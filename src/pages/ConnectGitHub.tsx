@@ -58,14 +58,70 @@ const ConnectGitHub = () => {
       setConnectionType(null);
       
       console.log('Fetching repositories with new token...');
-      const response = await fetch('https://api.github.com/user/repos?visibility=all&sort=updated&per_page=100', {
+      
+      // First try to fetch all repositories (for classic PATs)
+      let response = await fetch('https://api.github.com/user/repos?visibility=all&sort=updated&per_page=100', {
         headers: {
           'Authorization': `token ${token}`,
           'Accept': 'application/vnd.github.v3+json',
         },
       });
 
-      if (!response.ok) {
+      let repos: GitHubRepo[] = [];
+
+      if (response.ok) {
+        repos = await response.json();
+        console.log('Classic PAT fetch successful, found', repos.length, 'repositories');
+      } else if (response.status === 403 || response.status === 401) {
+        // Fine-grained PAT detected - try alternative approach
+        console.log('Classic PAT failed, trying fine-grained PAT approach...');
+        
+        // For fine-grained PATs, we need to fetch repositories the token has access to
+        // This includes both private repos with specific access and public repos of the user
+        const installationResponse = await fetch('https://api.github.com/user/installations', {
+          headers: {
+            'Authorization': `token ${token}`,
+            'Accept': 'application/vnd.github.v3+json',
+          },
+        });
+
+        if (installationResponse.ok) {
+          const installations = await installationResponse.json();
+          if (installations.installations && installations.installations.length > 0) {
+            // Fine-grained PAT with installation access
+            const installationReposResponse = await fetch(`https://api.github.com/user/installations/${installations.installations[0].id}/repositories`, {
+              headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+              },
+            });
+            
+            if (installationReposResponse.ok) {
+              const installationRepos = await installationReposResponse.json();
+              repos = installationRepos.repositories || [];
+              console.log('Fine-grained PAT fetch successful, found', repos.length, 'repositories');
+            }
+          }
+        }
+        
+        // If no installation repos found, try fetching just the accessible repos
+        if (repos.length === 0) {
+          const accessibleResponse = await fetch('https://api.github.com/user/repos?visibility=private&sort=updated&per_page=100', {
+            headers: {
+              'Authorization': `token ${token}`,
+              'Accept': 'application/vnd.github.v3+json',
+            },
+          });
+          
+          if (accessibleResponse.ok) {
+            repos = await accessibleResponse.json();
+            console.log('Private repos fetch successful, found', repos.length, 'repositories');
+          }
+        }
+      }
+
+      // Handle cases where no repos were found or error occurred
+      if (repos.length === 0 && !response.ok) {
         if (response.status === 401) {
           throw new Error('Invalid access token. Please check your token and ensure it has the correct permissions.');
         } else if (response.status === 403) {
@@ -74,7 +130,6 @@ const ConnectGitHub = () => {
         throw new Error(`Failed to fetch repositories (${response.status})`);
       }
 
-      const repos: GitHubRepo[] = await response.json();
       const privateCount = repos.filter(repo => repo.private).length;
       const publicCount = repos.filter(repo => !repo.private).length;
       
