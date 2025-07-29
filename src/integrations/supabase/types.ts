@@ -44,6 +44,98 @@ export type Database = {
         }
         Relationships: []
       }
+      repositories: {
+        Row: {
+          analysis_status: string | null
+          created_at: string
+          description: string | null
+          forks_count: number | null
+          full_name: string
+          github_id: number
+          html_url: string
+          id: string
+          language: string | null
+          last_analyzed_at: string | null
+          name: string
+          open_issues_count: number | null
+          private: boolean
+          stargazers_count: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_status?: string | null
+          created_at?: string
+          description?: string | null
+          forks_count?: number | null
+          full_name: string
+          github_id: number
+          html_url: string
+          id?: string
+          language?: string | null
+          last_analyzed_at?: string | null
+          name: string
+          open_issues_count?: number | null
+          private?: boolean
+          stargazers_count?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_status?: string | null
+          created_at?: string
+          description?: string | null
+          forks_count?: number | null
+          full_name?: string
+          github_id?: number
+          html_url?: string
+          id?: string
+          language?: string | null
+          last_analyzed_at?: string | null
+          name?: string
+          open_issues_count?: number | null
+          private?: boolean
+          stargazers_count?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      repository_analysis: {
+        Row: {
+          analysis_type: string
+          content: Json
+          created_at: string
+          id: string
+          repository_id: string
+          updated_at: string
+        }
+        Insert: {
+          analysis_type: string
+          content: Json
+          created_at?: string
+          id?: string
+          repository_id: string
+          updated_at?: string
+        }
+        Update: {
+          analysis_type?: string
+          content?: Json
+          created_at?: string
+          id?: string
+          repository_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repository_analysis_repository_id_fkey"
+            columns: ["repository_id"]
+            isOneToOne: false
+            referencedRelation: "repositories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
