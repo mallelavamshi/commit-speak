@@ -54,16 +54,24 @@ const ConnectGitHub = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch repositories');
+        if (response.status === 401) {
+          throw new Error('Invalid access token. Please check your token and ensure it has the correct permissions.');
+        } else if (response.status === 403) {
+          throw new Error('Access denied. Make sure your token has "repo" scope for private repositories.');
+        }
+        throw new Error(`Failed to fetch repositories (${response.status})`);
       }
 
       const repos: GitHubRepo[] = await response.json();
+      const privateCount = repos.filter(repo => repo.private).length;
+      const publicCount = repos.filter(repo => !repo.private).length;
+      
       setRepositories(repos);
       setConnectionType('token');
       
       toast({
         title: "Success!",
-        description: `Found ${repos.length} repositories`,
+        description: `Found ${repos.length} repositories (${privateCount} private, ${publicCount} public)`,
       });
     } catch (error) {
       toast({
@@ -257,17 +265,29 @@ const ConnectGitHub = () => {
                   <Lock className="h-5 w-5 text-primary" />
                   <h2 className="text-xl font-semibold">Connect with Personal Access Token</h2>
                 </div>
-                <p className="text-sm text-muted-foreground mb-4">
-                  For private repositories and full access to your GitHub account. 
-                  <a 
-                    href="https://github.com/settings/tokens" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline ml-1"
-                  >
-                    Create a token here →
-                  </a>
-                </p>
+                <div className="text-sm text-muted-foreground mb-4 space-y-2">
+                  <p>
+                    For private repositories and full access to your GitHub account. 
+                    <a 
+                      href="https://github.com/settings/tokens" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline ml-1"
+                    >
+                      Create a token here →
+                    </a>
+                  </p>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-md p-3">
+                    <p className="font-medium text-amber-700 dark:text-amber-300 mb-1">Required Token Permissions:</p>
+                    <ul className="text-xs space-y-1 text-amber-600 dark:text-amber-400">
+                      <li>• <strong>repo</strong> - Full control of private repositories</li>
+                      <li>• <strong>read:user</strong> - Read access to user profile info</li>
+                    </ul>
+                    <p className="text-xs mt-2 text-amber-600 dark:text-amber-400">
+                      Without "repo" scope, you'll only see public repositories.
+                    </p>
+                  </div>
+                </div>
                 
                 <div className="space-y-3">
                   <Label htmlFor="access-token">GitHub Personal Access Token</Label>
