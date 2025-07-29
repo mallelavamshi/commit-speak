@@ -14,7 +14,7 @@ import {
   Loader2,
   Trash2
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Repository {
   id: string;
@@ -45,9 +45,18 @@ interface RepositoryCardProps {
   repository: Repository;
   analysis?: RepositoryAnalysis;
   onDelete?: (repositoryId: string) => void;
+  onRefresh?: (repositoryId: string) => void;
 }
 
-export const RepositoryCard = ({ repository, analysis, onDelete }: RepositoryCardProps) => {
+export const RepositoryCard = ({ repository, analysis, onDelete, onRefresh }: RepositoryCardProps) => {
+  const navigate = useNavigate();
+
+  const handleViewClick = () => {
+    if (onRefresh) {
+      onRefresh(repository.id);
+    }
+    navigate(`/project/${repository.id}`);
+  };
   const getStatusIcon = () => {
     switch (repository.analysis_status) {
       case 'completed':
@@ -194,10 +203,11 @@ export const RepositoryCard = ({ repository, analysis, onDelete }: RepositoryCar
 
         {/* Actions */}
         <div className="flex items-center gap-2 pt-2">
-          <Button asChild size="sm">
-            <Link to={`/project/${repository.id}`}>
-              View Details
-            </Link>
+          <Button 
+            size="sm"
+            onClick={handleViewClick}
+          >
+            View Details
           </Button>
           <Button variant="outline" size="sm" asChild>
             <a href={repository.html_url} target="_blank" rel="noopener noreferrer">

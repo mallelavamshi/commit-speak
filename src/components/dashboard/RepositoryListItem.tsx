@@ -13,7 +13,7 @@ import {
   Lock,
   Unlock
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Repository {
   id: string;
@@ -33,9 +33,18 @@ interface Repository {
 interface RepositoryListItemProps {
   repository: Repository;
   onDelete?: (repositoryId: string) => void;
+  onRefresh?: (repositoryId: string) => void;
 }
 
-export const RepositoryListItem = ({ repository, onDelete }: RepositoryListItemProps) => {
+export const RepositoryListItem = ({ repository, onDelete, onRefresh }: RepositoryListItemProps) => {
+  const navigate = useNavigate();
+
+  const handleViewClick = () => {
+    if (onRefresh) {
+      onRefresh(repository.id);
+    }
+    navigate(`/project/${repository.id}`);
+  };
   const getStatusIcon = () => {
     switch (repository.analysis_status) {
       case 'completed':
@@ -115,10 +124,12 @@ export const RepositoryListItem = ({ repository, onDelete }: RepositoryListItemP
 
       {/* Actions */}
       <div className="flex items-center gap-1 ml-4">
-        <Button asChild size="sm" variant="ghost">
-          <Link to={`/project/${repository.id}`}>
-            View
-          </Link>
+        <Button 
+          size="sm" 
+          variant="ghost"
+          onClick={handleViewClick}
+        >
+          View
         </Button>
         <Button variant="ghost" size="sm" asChild>
           <a href={repository.html_url} target="_blank" rel="noopener noreferrer">

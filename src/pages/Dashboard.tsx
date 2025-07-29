@@ -75,159 +75,65 @@ const Dashboard = () => {
     fetchRepositories();
   }, [user?.id, navigate]); // Use user.id specifically to detect user changes
 
-  // Set up real-time listeners
-  useEffect(() => {
-    if (!user) return;
+  // Simple refresh function for when user clicks View
+  const refreshRepositoryData = async (repositoryId: string) => {
+    const repository = repositories.find(repo => repo.id === repositoryId);
+    if (!repository) return;
 
-    console.log('Setting up real-time listeners for repositories and analysis');
-
-    // Listen for repository changes
-    const repositoriesChannel = supabase
-      .channel('repositories-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'repositories',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Repository change detected:', payload);
-          
-          if (payload.eventType === 'INSERT') {
-            setRepositories(prev => [payload.new as Repository, ...prev]);
-            toast({
-              title: "New Repository Added",
-              description: `${payload.new.full_name} has been connected to your dashboard.`,
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            setRepositories(prev => 
-              prev.map(repo => 
-                repo.id === payload.new.id ? payload.new as Repository : repo
-              )
-            );
-            // Show notification for significant changes
-            if (payload.old.analysis_status !== payload.new.analysis_status) {
-              const statusMessages = {
-                analyzing: "Analysis started",
-                completed: "Analysis completed",
-                failed: "Analysis failed"
-              };
-              toast({
-                title: "Repository Status Updated",
-                description: `${payload.new.full_name}: ${statusMessages[payload.new.analysis_status] || 'Status changed'}`,
-              });
-            }
-          } else if (payload.eventType === 'DELETE') {
-            setRepositories(prev => prev.filter(repo => repo.id !== payload.old.id));
-          }
-        }
-      )
-      .subscribe();
-
-    // Listen for analysis changes
-    const analysisChannel = supabase
-      .channel('analysis-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'repository_analysis'
-        },
-        (payload) => {
-          console.log('Analysis change detected:', payload);
-          
-          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            if (payload.new.analysis_type === 'overview') {
-              setAnalysis(prev => ({
-                ...prev,
-                [payload.new.repository_id]: payload.new.content as RepositoryAnalysis
-              }));
-              
-              if (payload.eventType === 'INSERT') {
-                toast({
-                  title: "New Analysis Available",
-                  description: "Repository analysis has been completed with fresh insights.",
-                });
-              }
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscriptions
-    return () => {
-      supabase.removeChannel(repositoriesChannel);
-      supabase.removeChannel(analysisChannel);
-    };
-  }, [user?.id, toast]);
-
-  // Auto-sync with GitHub every 2 minutes (reduced frequency)
-  useEffect(() => {
-    if (!user || repositories.length === 0) return;
-
-    const syncWithGitHub = async () => {
-      console.log('Auto-syncing repositories with GitHub...', repositories.length, 'repositories');
-      
+    console.log('Refreshing data for repository:', repository.full_name);
+    
+    try {
       const githubToken = localStorage.getItem('github_token');
       if (!githubToken) {
-        console.log('No GitHub token found, skipping auto-sync');
+        console.log('No GitHub token found, skipping refresh');
         return;
       }
 
-      for (const repo of repositories.slice(0, 3)) { // Limit to first 3 repos to avoid rate limits
-        if (syncStatus[repo.id] === 'syncing') continue; // Skip if already syncing
-        
-        console.log('Syncing repository:', repo.full_name);
-        setSyncStatus(prev => ({ ...prev, [repo.id]: 'syncing' }));
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('github-sync', {
-            body: {
-              repositoryId: repo.id,
-              githubToken: githubToken
-            }
-          });
+      // Show loading state
+      setRepositories(prev => 
+        prev.map(repo => 
+          repo.id === repositoryId 
+            ? { ...repo, analysis_status: 'analyzing' }
+            : repo
+        )
+      );
 
-          if (error) {
-            console.error('GitHub sync error for', repo.full_name, error);
-            setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
-          } else {
-            console.log('GitHub sync success for', repo.full_name, data);
-            setSyncStatus(prev => ({ ...prev, [repo.id]: 'synced' }));
-          }
-        } catch (error) {
-          console.error('Error syncing repository', repo.full_name, error);
-          setSyncStatus(prev => ({ ...prev, [repo.id]: 'error' }));
+      // Call the github-sync function to refresh data
+      const { data, error } = await supabase.functions.invoke('github-sync', {
+        body: {
+          repositoryId: repositoryId,
+          githubToken: githubToken
         }
-        
-        // Add small delay between repos to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      });
+
+      if (error) {
+        console.error('Error refreshing repository data:', error);
+        // Reset status on error
+        setRepositories(prev => 
+          prev.map(repo => 
+            repo.id === repositoryId 
+              ? { ...repo, analysis_status: 'failed' }
+              : repo
+          )
+        );
+      } else {
+        console.log('Repository data refreshed successfully:', data);
+        toast({
+          title: "Repository Updated",
+          description: `${repository.full_name} has been synced with latest GitHub data.`,
+        });
       }
-      
-      setLastSyncTime(new Date());
-    };
-
-    // Initial sync after 5 seconds
-    const initialSyncTimeout = setTimeout(() => {
-      console.log('Starting initial sync...');
-      syncWithGitHub();
-    }, 5000);
-    
-    // Set up periodic sync every 2 minutes
-    const syncInterval = setInterval(() => {
-      console.log('Starting periodic sync...');
-      syncWithGitHub();
-    }, 2 * 60 * 1000);
-
-    return () => {
-      clearTimeout(initialSyncTimeout);
-      clearInterval(syncInterval);
-    };
-  }, [user?.id, repositories.length]); // Only depend on repository count, not full array
+    } catch (error) {
+      console.error('Error in refreshRepositoryData:', error);
+      setRepositories(prev => 
+        prev.map(repo => 
+          repo.id === repositoryId 
+            ? { ...repo, analysis_status: 'failed' }
+            : repo
+        )
+      );
+    }
+  };
 
   const fetchRepositories = async () => {
     try {
@@ -534,6 +440,7 @@ const Dashboard = () => {
                       key={repository.id} 
                       repository={repository}
                       onDelete={initiateDelete}
+                      onRefresh={refreshRepositoryData}
                     />
                   ))}
                 </div>
@@ -545,6 +452,7 @@ const Dashboard = () => {
                       repository={repository}
                       analysis={analysis[repository.id]}
                       onDelete={initiateDelete}
+                      onRefresh={refreshRepositoryData}
                     />
                   ))}
                 </div>
